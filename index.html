@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Master Mobile - Anagrafica & Presenze</title>
+  <meta name="theme-color" content="#1e293b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="data:application/json,{
+    \"name\": \"Master Mobile Anagrafica\",
+    \"short_name\": \"MasterMobile\",
+    \"start_url\": \".\",
+    \"display\": \"standalone\",
+    \"background_color\": \"#f8fafc\",
+    \"theme_color\": \"#1e293b\"
+  }">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Dexie.js (IndexedDB) -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+  <!-- jsPDF & AutoTable -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.min.js"></script>
+  <!-- SheetJS per esportazione Excel (.xlsx) su smartphone -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+
+  <style>
+    /* Ottimizzazioni per smartphone e gesture touch */
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      overscroll-behavior-y: none;
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+      padding-top: env(safe-area-inset-top);
+    }
+    .safe-bottom {
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    }
+    ::-webkit-scrollbar { display: none; }
+    .nav-btn.active {
+      color: #2563eb;
+    }
+    .nav-btn.active svg {
+      stroke: #2563eb;
+      transform: scale(1.1);
+      transition: transform 0.15s ease;
+    }
+    .touch-press:active {
+      transform: scale(0.97);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased select-none">
+
+  <!-- TOP BAR SMARTPHONE -->
+  <header class="bg-slate-900 text-white px-4 py-3 sticky top-0 z-30 shadow-md flex justify-between items-center">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-xs">
+        <i data-lucide="smartphone" class="w-4 h-4"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-sm tracking-tight flex items-center gap-1.5" id="app-topbar-title">
+          Master Mobile <span class="text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono">v2.5</span>
+        </h1>
+        <p class="text-[10px] text-slate-400" id="app-topbar-sub">Sincronizzato con archivio PC</p>
+      </div>
+    </div>
+
+    <!-- AZIONI RAPIDE HEADER -->
+    <div class="flex items-center gap-2">
+      <button onclick="renderView('sync')" title="Sincronizza / Importa da PC" class="p-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-blue-400 rounded-xl transition border border-slate-700">
+        <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+      </button>
+      <button onclick="openModalPersona()" title="Nuovo Nominativo" class="p-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl shadow transition">
+        <i data-lucide="user-plus" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTENITORE PRINCIPALE VISTE SMARTPHONE -->
+  <main class="flex-1 p-3.5 max-w-lg mx-auto w-full" id="mobile-workspace">
+    <!-- Contenuto dinamico iniettato via JS -->
+  </main>
+
+  <!-- BOTTOM NAVIGATION BAR SMARTPHONE -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-40 max-w-lg mx-auto safe-bottom shadow-lg">
+    <div class="flex justify-around items-center h-14 px-1">
+      <button onclick="renderView('home')" id="tab-home" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-500 text-[10px] font-semibold transition">
+        <i data-lucide="home" class="w-5 h-5 mb-0.5"></i>
+        <span>Home</span>
+      </button>
+
+      <button onclick="renderView('persone')" id="tab-persone" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-500 text-[10px] font-semibold transition">
+        <i data-lucide="users" class="w-5 h-5 mb-0.5"></i>
+        <span>Persone</span>
+      </button>
+
+      <button onclick="renderView('gruppi')" id="tab-gruppi" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-500 text-[10px] font-semibold transition">
+        <i data-lucide="folder-users" class="w-5 h-5 mb-0.5"></i>
+        <span>Gruppi</span>
+      </button>
+
+      <button onclick="renderView('eventi')" id="tab-eventi" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-500 text-[10px] font-semibold transition">
+        <i data-lucide="calendar-check" class="w-5 h-5 mb-0.5"></i>
+        <span>Presenze</span>
+      </button>
+
+      <button onclick="renderView('sync')" id="tab-sync" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-500 text-[10px] font-semibold transition">
+        <i data-lucide="hard-drive-download" class="w-5 h-5 mb-0.5"></i>
+        <span>Da PC</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MODALS & TOAST CONTAINERS -->
+  <div id="modal-container"></div>
+  <div id="toast-container" class="fixed top-4 left-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm mx-auto"></div>
+
+  <script>
+    // --- DATABASE SCHEMA IDENTICO ALL'APPLICATIVO DESKTOP ---
+    const db = new Dexie('MobileAnagraficaDB');
+    db.version(1).stores({
+      persone: '++id, cognome, nome, data_nascita, luogo_nascita, codice_fiscale, telefono, email, data_inserimento',
+      gruppi: '++id, nome, descrizione, colore',
+      persone_gruppi: '++id, persona_id, gruppo_id, [gruppo_id+persona_id]',
+      liste: '++id, nome, data_evento, descrizione, data_creazione',
+      persone_liste: '++id, persona_id, lista_id, presente, [lista_id+persona_id]'
+    });
+
+    // STATO APPLICAZIONE MOBILE
+    let currentView = 'home';
+    let currentParam = null;
+    let searchQueryPersone = '';
+    let filterGruppoPersone = '';
+    let sortPersone = 'alpha';
+
+    // AVVIO
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      await seedDemoIfEmpty();
+      renderView('home');
+    });
+
+    // --- UTILITIES UI & FORMATTAZIONE ---
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-600 text-white shadow-emerald-900/30',
+        error: 'bg-rose-600 text-white shadow-rose-900/30',
+        warning: 'bg-amber-500 text-white shadow-amber-900/30',
+        info: 'bg-slate-900 text-white shadow-slate-900/40'
+      };
+      toast.className = `${colors[type] || colors.info} pointer-events-auto px-3.5 py-2.5 rounded-2xl shadow-xl text-xs font-semibold flex items-center justify-between gap-2 border border-white/10 transition transform duration-200 -translate-y-3 opacity-0`;
+      toast.innerHTML = `<span class="flex-1 leading-snug">${escapeHtml(message)}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('-translate-y-3', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-3');
+        setTimeout(() => toast.remove(), 250);
+      }, 3200);
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N.D.';
+      try {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        const d = new Date(dateStr);
+        return isNaN(d) ? dateStr : d.toLocaleDateString('it-IT');
+      } catch(e) {
+        return dateStr;
+      }
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function defaultAvatar() {
+      return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="%23cbd5e1"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>';
+    }
+
+    function triggerHaptic() {
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(35); } catch(e) {}
+      }
+    }
+
+    // --- GESTIONE ROUTING VISTE ---
+    function renderView(view, param = null) {
+      currentView = view;
+      currentParam = param;
+      const ws = document.getElementById('mobile-workspace');
+
+      // Aggiorna icone tab bar
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      const activeTab = document.getElementById(`tab-${view}`);
+      if (activeTab) activeTab.classList.add('active');
+
+      switch(view) {
+        case 'home': renderHomeView(ws); break;
+        case 'persone': renderPersoneView(ws); break;
+        case 'scheda-persona': renderSchedaPersonaView(ws, param); break;
+        case 'gruppi': renderGruppiView(ws); break;
+        case 'dettaglio-gruppo': renderDettaglioGruppoView(ws, param); break;
+        case 'eventi': renderEventiView(ws); break;
+        case 'dettaglio-evento': renderDettaglioEventoView(ws, param); break;
+        case 'sync': renderSyncView(ws); break;
+        default: renderHomeView(ws);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      lucide.createIcons();
+    }
+
+    async function renderHomeView(container) {
+      const totalPersone = await db.persone.count();
+      const totalGruppi = await db.gruppi.count();
+      const totalEventi = await db.liste.count();
+      const lastEvento = await db.liste.orderBy('data_evento').reverse().first();
+
+      let eventoStats = { total: 0, pres: 0 };
+      if (lastEvento) {
+        eventoStats.total = await db.persone_liste.where('lista_id').equals(lastEvento.id).count();
+        eventoStats.pres = await db.persone_liste.where({ lista_id: lastEvento.id, presente: 1 }).count();
+      }
+
+      const recenti = await db.persone.orderBy('data_inserimento').reverse().limit(4).toArray();
+
+      container.innerHTML = `
+        <div class="space-y-3.5">
+          
+          <!-- BANNER DI SINCRONIZZAZIONE SMARTPHONE / PC -->
+          <div class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white p-4 rounded-3xl shadow-sm relative overflow-hidden">
+            <div class="relative z-10">
+              <span class="text-[10px] uppercase font-bold tracking-wider bg-white/20 px-2 py-0.5 rounded-full">Pronto per l'Uso</span>
+              <h2 class="text-base font-extrabold mt-1.5 leading-tight">Archivio Personale Mobile</h2>
+              <p class="text-xs text-blue-100/90 mt-1 mb-3">
+                Importa in un tocco il file esportato dal PC con tutti i nominativi, foto e gruppi completi.
+              </p>
+              
+              <div class="flex gap-2">
+                <button onclick="renderView('sync')" class="flex-1 bg-white text-blue-800 font-bold text-xs py-2 px-3 rounded-xl shadow-sm touch-press flex items-center justify-center gap-1.5">
+                  <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Importa File PC
+                </button>
+                <button onclick="exportSmartphonePackage()" class="bg-blue-600/70 hover:bg-blue-600 text-white font-bold text-xs py-2 px-3 rounded-xl touch-press flex items-center justify-center gap-1.5 border border-white/20">
+                  <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Esporta
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CONTATORI STATISTICI -->
+          <div class="grid grid-cols-3 gap-2">
+            <div onclick="renderView('persone')" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm text-center touch-press cursor-pointer">
+              <span class="text-[10px] font-bold text-blue-600 uppercase block">Persone</span>
+              <p class="text-xl font-black text-slate-800 mt-0.5">${totalPersone}</p>
+            </div>
+            <div onclick="renderView('gruppi')" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm text-center touch-press cursor-pointer">
+              <span class="text-[10px] font-bold text-purple-600 uppercase block">Gruppi</span>
+              <p class="text-xl font-black text-slate-800 mt-0.5">${totalGruppi}</p>
+            </div>
+            <div onclick="renderView('eventi')" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm text-center touch-press cursor-pointer">
+              <span class="text-[10px] font-bold text-emerald-600 uppercase block">Eventi</span>
+              <p class="text-xl font-black text-slate-800 mt-0.5">${totalEventi}</p>
+            </div>
+          </div>
+
+          <!-- SCHEDA ULTIMO EVENTO PROGRAMMATO -->
+          ${lastEvento ? `
+            <div onclick="renderView('dettaglio-evento', ${lastEvento.id})" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm touch-press cursor-pointer space-y-2">
+              <div class="flex justify-between items-start">
+                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <i data-lucide="calendar" class="w-3 h-3"></i> Evento Attivo
+                </span>
+                <span class="text-xs font-semibold text-slate-400">${formatDate(lastEvento.data_evento)}</span>
+              </div>
+
+              <div>
+                <h3 class="font-bold text-sm text-slate-900">${escapeHtml(lastEvento.nome)}</h3>
+                <p class="text-xs text-slate-500 line-clamp-1">${escapeHtml(lastEvento.descrizione || 'Nessuna nota aggiuntiva')}</p>
+              </div>
+
+              <!-- BARRA PROGRESSO PRESENZE -->
+              <div class="pt-1">
+                <div class="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                  <span>Presenze rilevate</span>
+                  <span class="text-emerald-600">${eventoStats.pres} su ${eventoStats.total}</span>
+                </div>
+                <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-emerald-500 rounded-full" style="width: ${eventoStats.total > 0 ? (eventoStats.pres / eventoStats.total) * 100 : 0}%"></div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- ULTIME PERSONE INSERITE -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 space-y-2">
+            <div class="flex justify-between items-center mb-1">
+              <h3 class="font-bold text-xs text-slate-900 uppercase tracking-wide">Recenti in archivio</h3>
+              <button onclick="renderView('persone')" class="text-xs text-blue-600 font-bold">Vedi tutte</button>
+            </div>
+
+            <div class="divide-y divide-slate-100">
+              ${recenti.length === 0 ? '<p class="text-center py-4 text-xs text-slate-400">Nessuna persona registrata.</p>' : ''}
+              ${recenti.map(p => `
+                <div onclick="renderView('scheda-persona', ${p.id})" class="py-2 flex items-center justify-between touch-press cursor-pointer">
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <img src="${p.foto || defaultAvatar()}" class="w-9 h-9 rounded-full object-cover border border-slate-200">
+                    <div class="min-w-0">
+                      <p class="font-bold text-xs text-slate-900 truncate">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</p>
+                      <p class="text-[10px] text-slate-400 truncate">${escapeHtml(p.luogo_nascita || formatDate(p.data_nascita))}</p>
+                    </div>
+                  </div>
+                  <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- BOTTONI RAPIDI AZIONI -->
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onclick="openModalPersona()" class="p-3 bg-slate-900 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow touch-press">
+              <i data-lucide="user-plus" class="w-4 h-4"></i> + Persona
+            </button>
+            <button onclick="openModalNuovoEvento()" class="p-3 bg-blue-600 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow touch-press">
+              <i data-lucide="calendar-plus" class="w-4 h-4"></i> + Evento
+            </button>
+          </div>
+
+        </div>
+      `;
+    }
+
+    async function renderPersoneView(container) {
+      const gruppi = await db.gruppi.toArray();
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          
+          <!-- SEARCH & QUICK BAR -->
+          <div class="space-y-2 sticky top-[52px] bg-slate-100 pt-1 pb-1 z-20">
+            <div class="relative">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+              <input type="text" id="mobile-search-persone" oninput="filtraPersoneMobile()" value="${escapeHtml(searchQueryPersone)}"
+                placeholder="Cerca per cognome, nome, CF, tel..."
+                class="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+              ${searchQueryPersone ? `
+                <button onclick="clearSearchPersone()" class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600">
+                  <i data-lucide="x-circle" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
+            </div>
+
+            <!-- FILTRI GRUPPO E ORDINAMENTO COMPATTO -->
+            <div class="flex gap-2 text-xs">
+              <select id="mobile-filter-gruppo" onchange="filtraPersoneMobile()" class="flex-1 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-700 font-semibold focus:outline-none truncate">
+                <option value="">Tutti i Gruppi</option>
+                ${gruppi.map(g => `<option value="${g.id}" ${filterGruppoPersone == g.id ? 'selected' : ''}>${escapeHtml(g.nome)}</option>`).join('')}
+              </select>
+
+              <select id="mobile-filter-sort" onchange="filtraPersoneMobile()" class="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-700 font-semibold focus:outline-none">
+                <option value="alpha" ${sortPersone === 'alpha' ? 'selected' : ''}>A-Z</option>
+                <option value="recent" ${sortPersone === 'recent' ? 'selected' : ''}>Recenti</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- CONTATORE & PULSANTE PDF / EXCEL -->
+          <div class="flex justify-between items-center px-1 text-xs">
+            <span id="mobile-counter-persone" class="font-bold text-slate-500">Caricamento...</span>
+            <div class="flex items-center gap-2">
+              <button onclick="exportPersonePDFMobile()" class="text-rose-600 font-bold flex items-center gap-1 hover:underline">
+                <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
+              </button>
+              <button onclick="exportAllPeopleToExcelMobile()" class="text-emerald-600 font-bold flex items-center gap-1 hover:underline">
+                <i data-lucide="sheet" class="w-3.5 h-3.5"></i> Excel
+              </button>
+            </div>
+          </div>
+
+          <!-- LISTA CARDS PERSONE SMARTPHONE -->
+          <div id="mobile-persone-list" class="space-y-2"></div>
+        </div>
+      `;
+      filtraPersoneMobile();
+    }
+
+    function clearSearchPersone() {
+      const input = document.getElementById('mobile-search-persone');
+      if (input) input.value = '';
+      filtraPersoneMobile();
+    }
+
+    async function filtraPersoneMobile() {
+      searchQueryPersone = document.getElementById('mobile-search-persone')?.value.toLowerCase().trim() || '';
+      filterGruppoPersone = document.getElementById('mobile-filter-gruppo')?.value || '';
+      sortPersone = document.getElementById('mobile-filter-sort')?.value || 'alpha';
+
+      const listContainer = document.getElementById('mobile-persone-list');
+      const counterEl = document.getElementById('mobile-counter-persone');
+      if (!listContainer) return;
+
+      let persone = await db.persone.toArray();
+      const allAssoc = await db.persone_gruppi.toArray();
+      const allGruppi = await db.gruppi.toArray();
+      const mapGruppi = {};
+      allGruppi.forEach(g => mapGruppi[g.id] = g.nome);
+
+      const userGroupsMap = {};
+      allAssoc.forEach(a => {
+        if (!userGroupsMap[a.persona_id]) userGroupsMap[a.persona_id] = [];
+        if (mapGruppi[a.gruppo_id]) userGroupsMap[a.persona_id].push(mapGruppi[a.gruppo_id]);
+      });
+
+      if (filterGruppoPersone) {
+        const targetGId = parseInt(filterGruppoPersone);
+        const validIds = new Set(allAssoc.filter(a => a.gruppo_id === targetGId).map(a => a.persona_id));
+        persone = persone.filter(p => validIds.has(p.id));
+      }
+
+      if (searchQueryPersone) {
+        persone = persone.filter(p => {
+          const str = `${p.cognome} ${p.nome} ${p.codice_fiscale || ''} ${p.telefono || ''} ${p.luogo_nascita || ''}`.toLowerCase();
+          return str.includes(searchQueryPersone);
+        });
+      }
+
+      if (sortPersone === 'alpha') {
+        persone.sort((a, b) => a.cognome.localeCompare(b.cognome) || a.nome.localeCompare(b.nome));
+      } else {
+        persone.sort((a, b) => new Date(b.data_inserimento || 0) - new Date(a.data_inserimento || 0));
+      }
+
+      counterEl.innerText = `${persone.length} persone`;
+
+      if (persone.length === 0) {
+        listContainer.innerHTML = `
+          <div class="bg-white p-8 rounded-2xl border text-center text-slate-400">
+            <i data-lucide="user-x" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+            <p class="font-bold text-xs">Nessun soggetto trovato</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      listContainer.innerHTML = persone.map(p => {
+        const gruppiUser = userGroupsMap[p.id] || [];
+        return `
+          <div onclick="renderView('scheda-persona', ${p.id})" class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-3 touch-press cursor-pointer">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <img src="${p.foto || defaultAvatar()}" class="w-12 h-12 rounded-2xl object-cover border border-slate-100 shadow-sm flex-shrink-0">
+              <div class="min-w-0 flex-1">
+                <h4 class="font-bold text-xs text-slate-900 truncate">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</h4>
+                <p class="text-[11px] text-slate-500 font-mono truncate">${escapeHtml(p.codice_fiscale || formatDate(p.data_nascita))}</p>
+                
+                ${gruppiUser.length > 0 ? `
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    ${gruppiUser.slice(0, 2).map(g => `<span class="bg-purple-50 text-purple-700 font-bold text-[9px] px-1.5 py-0.2 rounded">${escapeHtml(g)}</span>`).join('')}
+                    ${gruppiUser.length > 2 ? `<span class="text-[9px] text-slate-400 font-bold">+${gruppiUser.length - 2}</span>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- AZIONE RAPIDA CHIAMATA SE PRESENTE TELEFONO -->
+            <div class="flex items-center gap-1.5" onclick="event.stopPropagation()">
+              ${p.telefono ? `
+                <a href="tel:${escapeHtml(p.telefono)}" class="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center border border-emerald-100 touch-press" title="Chiama">
+                  <i data-lucide="phone" class="w-4 h-4"></i>
+                </a>
+              ` : ''}
+              <button onclick="renderView('scheda-persona', ${p.id})" class="w-8 h-8 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center border border-slate-100">
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    async function renderSchedaPersonaView(container, id) {
+      const p = await db.persone.get(id);
+      if (!p) return renderView('persone');
+
+      const assocG = await db.persone_gruppi.where('persona_id').equals(id).toArray();
+      const gIds = assocG.map(a => a.gruppo_id);
+      const gruppi = await db.gruppi.where('id').anyOf(gIds).toArray();
+
+      const assocL = await db.persone_liste.where('persona_id').equals(id).toArray();
+      const lIds = assocL.map(a => a.lista_id);
+      const liste = await db.liste.where('id').anyOf(lIds).toArray();
+      const mapPresenze = {};
+      assocL.forEach(a => mapPresenze[a.lista_id] = a.presente);
+
+      container.innerHTML = `
+        <div class="space-y-3.5">
+          <button onclick="renderView('persone')" class="text-xs font-bold text-blue-600 flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Elenco persone
+          </button>
+
+          <!-- DOSSIER CARD COMPATTA MOBILE -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 text-center space-y-3">
+            <img src="${p.foto || defaultAvatar()}" class="w-32 h-32 rounded-3xl object-cover border-4 border-slate-100 shadow-md mx-auto">
+            <div>
+              <h2 class="text-base font-extrabold text-slate-900">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</h2>
+              <span class="text-[11px] text-slate-400 font-mono">ID: #${p.id}</span>
+            </div>
+
+            <!-- PULSANTI MODIFICA ED ELIMINA -->
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button onclick="openModalPersona(${p.id})" class="p-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 touch-press">
+                <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> Modifica
+              </button>
+              <button onclick="confirmDeletePersona(${p.id}, '${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}')" class="p-2.5 bg-rose-50 text-rose-600 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 touch-press">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Elimina
+              </button>
+            </div>
+          </div>
+
+          <!-- DETTAGLI ANAGRAFICI -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2.5 text-xs">
+            <h4 class="font-bold text-[10px] uppercase tracking-wider text-slate-400 border-b pb-1.5">Scheda Dati Completa</h4>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 text-[10px] block font-semibold">DATA NASCITA</span>
+                <span class="font-bold text-slate-800">${formatDate(p.data_nascita)}</span>
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 text-[10px] block font-semibold">LUOGO</span>
+                <span class="font-bold text-slate-800 truncate block">${escapeHtml(p.luogo_nascita || 'N.D.')}</span>
+              </div>
+            </div>
+
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+              <span class="text-slate-400 text-[10px] block font-semibold">CODICE FISCALE</span>
+              <span class="font-bold font-mono text-slate-800">${escapeHtml(p.codice_fiscale ? p.codice_fiscale.toUpperCase() : 'Non inserito')}</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 text-[10px] block font-semibold">TELEFONO</span>
+                ${p.telefono ? `
+                  <a href="tel:${escapeHtml(p.telefono)}" class="font-bold text-blue-600 flex items-center gap-1 mt-0.5">
+                    <i data-lucide="phone-call" class="w-3 h-3"></i> ${escapeHtml(p.telefono)}
+                  </a>
+                ` : '<span class="font-bold text-slate-400">N.D.</span>'}
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 text-[10px] block font-semibold">EMAIL</span>
+                ${p.email ? `
+                  <a href="mailto:${escapeHtml(p.email)}" class="font-bold text-blue-600 truncate block mt-0.5">${escapeHtml(p.email)}</a>
+                ` : '<span class="font-bold text-slate-400">N.D.</span>'}
+              </div>
+            </div>
+
+            ${p.indirizzo ? `
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-slate-400 text-[10px] block font-semibold">INDIRIZZO RESIDENZA</span>
+                <span class="font-bold text-slate-800">${escapeHtml(p.indirizzo)}</span>
+              </div>
+            ` : ''}
+
+            ${p.note ? `
+              <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200/60">
+                <span class="text-amber-800 text-[10px] block font-semibold">NOTE / DOCUMENTO</span>
+                <p class="text-slate-700 whitespace-pre-line mt-0.5">${escapeHtml(p.note)}</p>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- GRUPPI ASSOCIATI -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
+            <div class="flex justify-between items-center">
+              <h4 class="font-bold text-xs uppercase tracking-wide text-purple-700">Gruppi di Appartenenza</h4>
+              <button onclick="openModalPersona(${p.id})" class="text-xs text-purple-600 font-bold">+ Modifica</button>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${gruppi.length === 0 ? '<span class="text-xs text-slate-400">Nessun gruppo associato.</span>' : 
+                gruppi.map(g => `<span class="bg-purple-100 text-purple-800 font-bold text-xs px-2.5 py-1 rounded-full">${escapeHtml(g.nome)}</span>`).join('')}
+            </div>
+          </div>
+
+          <!-- EVENTI E PRESENZE -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
+            <h4 class="font-bold text-xs uppercase tracking-wide text-slate-500">Cronologia Presenze Eventi</h4>
+            ${liste.length === 0 ? '<span class="text-xs text-slate-400">Nessun evento associato.</span>' : `
+              <div class="divide-y divide-slate-100">
+                ${liste.map(l => `
+                  <div class="py-2 flex justify-between items-center text-xs">
+                    <div>
+                      <p class="font-bold text-slate-800">${escapeHtml(l.nome)}</p>
+                      <p class="text-[10px] text-slate-400">${formatDate(l.data_evento)}</p>
+                    </div>
+                    <span class="font-bold text-[11px] ${mapPresenze[l.id] === 1 ? 'text-emerald-600' : 'text-slate-400'}">
+                      ${mapPresenze[l.id] === 1 ? 'PRESENTE' : 'ASSENTE'}
+                    </span>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    async function renderGruppiView(container) {
+      const gruppi = await db.gruppi.toArray();
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="flex justify-between items-center bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <i data-lucide="folder-users" class="w-4 h-4 text-purple-600"></i> Gruppi & Categorie
+              </h2>
+              <p class="text-[10px] text-slate-400">Tocca un gruppo per vedere i nominativi</p>
+            </div>
+            <button onclick="openModalNuovoGruppo()" class="bg-purple-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow touch-press flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Nuovo
+            </button>
+          </div>
+
+          <div class="space-y-2.5">
+            ${gruppi.length === 0 ? `
+              <div class="bg-white p-8 rounded-2xl border text-center text-slate-400">
+                <i data-lucide="folder-plus" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+                <p class="font-bold text-xs">Nessun gruppo creato.</p>
+              </div>
+            ` : ''}
+
+            ${await Promise.all(gruppi.map(async g => {
+              const count = await db.persone_gruppi.where('gruppo_id').equals(g.id).count();
+              return `
+                <div onclick="renderView('dettaglio-gruppo', ${g.id})" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between touch-press cursor-pointer">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                      <h3 class="font-bold text-xs text-slate-900 truncate">${escapeHtml(g.nome)}</h3>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-0.5 truncate">${escapeHtml(g.descrizione || 'Nessuna descrizione')}</p>
+                    <span class="inline-block mt-1 font-bold text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                      ${count} membri
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-1.5 ml-2" onclick="event.stopPropagation()">
+                    <button onclick="openModalNuovoGruppo(${g.id})" class="p-2 bg-purple-50 text-purple-700 rounded-xl border border-purple-100 touch-press">
+                      <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button onclick="confirmDeleteGruppo(${g.id}, '${escapeHtml(g.nome)}')" class="p-2 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 touch-press">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                </div>
+              `;
+            })).then(r => r.join(''))}
+          </div>
+        </div>
+      `;
+    }
+
+    async function renderDettaglioGruppoView(container, gruppoId) {
+      const g = await db.gruppi.get(gruppoId);
+      if (!g) return renderView('gruppi');
+
+      const assoc = await db.persone_gruppi.where('gruppo_id').equals(gruppoId).toArray();
+      const pIds = assoc.map(a => a.persona_id);
+      const persone = await db.persone.where('id').anyOf(pIds).toArray();
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      // Persone disponibili per aggiunta rapida
+      const allPersone = await db.persone.toArray();
+      const existingSet = new Set(pIds);
+      const disponibili = allPersone.filter(p => !existingSet.has(p.id)).sort((a,b) => a.cognome.localeCompare(b.cognome));
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          <button onclick="renderView('gruppi')" class="text-xs font-bold text-purple-600 flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Tutti i gruppi
+          </button>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+            <div>
+              <h2 class="font-bold text-sm text-slate-900">${escapeHtml(g.nome)}</h2>
+              <p class="text-[10px] text-slate-400">${persone.length} componenti associati</p>
+            </div>
+            <button onclick="exportMembriGruppoPDFMobile(${g.id}, '${escapeHtml(g.nome)}')" class="text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1">
+              <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
+            </button>
+          </div>
+
+          <!-- AGGIUNTA SOGGETTO RAPIDA -->
+          <div class="bg-purple-50/70 p-3 rounded-2xl border border-purple-100 flex gap-2">
+            <select id="select-add-membro-gruppo" class="flex-1 bg-white border border-purple-200 rounded-xl p-2 text-xs font-semibold focus:outline-none truncate">
+              <option value="">Aggiungi persona al gruppo...</option>
+              ${disponibili.map(p => `<option value="${p.id}">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</option>`).join('')}
+            </select>
+            <button onclick="aggiungiPersonaAlGruppoMobile(${g.id})" class="bg-purple-600 text-white font-bold text-xs px-3 py-2 rounded-xl touch-press">
+              Aggiungi
+            </button>
+          </div>
+
+          <!-- LISTA MEMBRI -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+            ${persone.length === 0 ? '<p class="p-6 text-center text-xs text-slate-400">Nessun membro in questo gruppo.</p>' : ''}
+            ${persone.map(p => `
+              <div class="p-3 flex items-center justify-between touch-press">
+                <div class="flex items-center gap-2.5 min-w-0" onclick="renderView('scheda-persona', ${p.id})">
+                  <img src="${p.foto || defaultAvatar()}" class="w-9 h-9 rounded-full object-cover border">
+                  <div class="min-w-0">
+                    <p class="font-bold text-xs text-slate-900 truncate">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</p>
+                    <p class="text-[10px] text-slate-400 font-mono">${escapeHtml(p.codice_fiscale || formatDate(p.data_nascita))}</p>
+                  </div>
+                </div>
+
+                <button onclick="rimuoviPersonaDaGruppoMobile(${p.id}, ${g.id})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl" title="Rimuovi">
+                  <i data-lucide="user-minus" class="w-4 h-4"></i>
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    async function aggiungiPersonaAlGruppoMobile(gruppoId) {
+      const id = parseInt(document.getElementById('select-add-membro-gruppo')?.value);
+      if (!id) return showToast('Seleziona una persona da aggiungere.', 'warning');
+      await db.persone_gruppi.add({ persona_id: id, gruppo_id: gruppoId });
+      showToast('Persona aggiunta al gruppo!', 'success');
+      renderView('dettaglio-gruppo', gruppoId);
+    }
+
+    async function rimuoviPersonaDaGruppoMobile(personaId, gruppoId) {
+      await db.persone_gruppi.where({ persona_id: personaId, gruppo_id: gruppoId }).delete();
+      showToast('Persona rimossa dal gruppo.', 'info');
+      renderView('dettaglio-gruppo', gruppoId);
+    }
+
+    async function renderEventiView(container) {
+      const liste = await db.liste.orderBy('data_evento').reverse().toArray();
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="flex justify-between items-center bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                <i data-lucide="calendar-check" class="w-4 h-4 text-blue-600"></i> Liste & Eventi Presenze
+              </h2>
+              <p class="text-[10px] text-slate-400">Rileva e spunta presenze in tempo reale</p>
+            </div>
+            <button onclick="openModalNuovoEvento()" class="bg-blue-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow touch-press flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Nuovo
+            </button>
+          </div>
+
+          <div class="space-y-2.5">
+            ${liste.length === 0 ? `
+              <div class="bg-white p-8 rounded-2xl border text-center text-slate-400">
+                <i data-lucide="calendar-x" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
+                <p class="font-bold text-xs">Nessun evento registrato.</p>
+              </div>
+            ` : ''}
+
+            ${await Promise.all(liste.map(async l => {
+              const totali = await db.persone_liste.where('lista_id').equals(l.id).count();
+              const presenti = await db.persone_liste.where({ lista_id: l.id, presente: 1 }).count();
+              const assenti = totali - presenti;
+              return `
+                <div onclick="renderView('dettaglio-evento', ${l.id})" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm touch-press cursor-pointer space-y-2.5">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <h3 class="font-bold text-xs text-slate-900">${escapeHtml(l.nome)}</h3>
+                      <p class="text-[10px] text-slate-400 mt-0.5">${formatDate(l.data_evento)}</p>
+                    </div>
+                    <button onclick="event.stopPropagation(); confirmDeleteEvento(${l.id}, '${escapeHtml(l.nome)}')" class="p-1.5 text-slate-400 hover:text-rose-600">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-1 text-center text-xs pt-1 border-t border-slate-100">
+                    <div class="bg-slate-50 p-1 rounded-lg">
+                      <span class="block text-[9px] text-slate-400 font-bold">ISCRITTI</span>
+                      <span class="font-extrabold text-slate-800">${totali}</span>
+                    </div>
+                    <div class="bg-emerald-50 p-1 rounded-lg">
+                      <span class="block text-[9px] text-emerald-600 font-bold">PRESENTI</span>
+                      <span class="font-extrabold text-emerald-700">${presenti}</span>
+                    </div>
+                    <div class="bg-rose-50 p-1 rounded-lg">
+                      <span class="block text-[9px] text-rose-600 font-bold">ASSENTI</span>
+                      <span class="font-extrabold text-rose-700">${assenti}</span>
+                    </div>
+                  </div>
+                </div>
+              `;
+            })).then(r => r.join(''))}
+          </div>
+        </div>
+      `;
+    }
+
+    async function renderDettaglioEventoView(container, eventoId) {
+      const ev = await db.liste.get(eventoId);
+      if (!ev) return renderView('eventi');
+
+      const assoc = await db.persone_liste.where('lista_id').equals(eventoId).toArray();
+      const pIds = assoc.map(a => a.persona_id);
+      const persone = await db.persone.where('id').anyOf(pIds).toArray();
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      const mapAssoc = {};
+      assoc.forEach(a => mapAssoc[a.persona_id] = a);
+
+      const totali = persone.length;
+      const presenti = assoc.filter(a => a.presente === 1).length;
+      const assenti = totali - presenti;
+
+      const allPersone = await db.persone.toArray();
+      const existingSet = new Set(pIds);
+      const disponibili = allPersone.filter(p => !existingSet.has(p.id)).sort((a,b) => a.cognome.localeCompare(b.cognome));
+      const gruppi = await db.gruppi.toArray();
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          <button onclick="renderView('eventi')" class="text-xs font-bold text-blue-600 flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Tutti gli eventi
+          </button>
+
+          <!-- TESTATA DETTAGLIO EVENTO -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+            <div class="flex justify-between items-start">
+              <div>
+                <h2 class="font-bold text-sm text-slate-900">${escapeHtml(ev.nome)}</h2>
+                <p class="text-[10px] text-slate-400 font-medium">Data: ${formatDate(ev.data_evento)}</p>
+              </div>
+
+              <button onclick="exportPresenzePDFMobile(${ev.id}, '${escapeHtml(ev.nome)}', '${ev.data_evento}')" class="bg-blue-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow touch-press flex items-center gap-1">
+                <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
+              </button>
+            </div>
+
+            <!-- CONTATORI DINAMICI -->
+            <div class="grid grid-cols-3 gap-1.5 text-center text-xs pt-1">
+              <div class="bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                <span class="block text-[9px] text-slate-400 font-bold">ISCRITTI</span>
+                <span class="font-black text-slate-800 text-sm">${totali}</span>
+              </div>
+              <div class="bg-emerald-50 p-1.5 rounded-xl border border-emerald-100">
+                <span class="block text-[9px] text-emerald-600 font-bold">PRESENTI</span>
+                <span class="font-black text-emerald-700 text-sm">${presenti}</span>
+              </div>
+              <div class="bg-rose-50 p-1.5 rounded-xl border border-rose-100">
+                <span class="block text-[9px] text-rose-600 font-bold">ASSENTI</span>
+                <span class="font-black text-rose-700 text-sm">${assenti}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ASSOCIAZIONE RAPIDA PERSONA O INTERO GRUPPO -->
+          <div class="bg-blue-50/70 p-3 rounded-2xl border border-blue-100 space-y-2">
+            <div class="flex gap-2">
+              <select id="select-add-persona-evento-mobile" class="flex-1 bg-white border border-blue-200 rounded-xl p-2 text-xs font-semibold focus:outline-none truncate">
+                <option value="">Aggiungi singolo partecipante...</option>
+                ${disponibili.map(p => `<option value="${p.id}">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</option>`).join('')}
+              </select>
+              <button onclick="aggiungiPersonaAdEventoMobile(${ev.id})" class="bg-blue-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl touch-press">
+                +
+              </button>
+            </div>
+
+            ${gruppi.length > 0 ? `
+              <div class="flex items-center gap-2 pt-1 border-t border-blue-200/50">
+                <select id="select-add-gruppo-evento-mobile" class="flex-1 bg-white border border-purple-200 rounded-xl p-1.5 text-xs font-semibold focus:outline-none truncate">
+                  <option value="">Associa intero gruppo...</option>
+                  ${gruppi.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('')}
+                </select>
+                <button onclick="aggiungiGruppoAdEventoMobile(${ev.id})" class="bg-purple-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl touch-press">
+                  Gruppo
+                </button>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- BARRA RICERCA E TAB FILTRO PRESENZE -->
+          <div class="space-y-2">
+            <input type="text" id="mobile-search-presenze" oninput="filtraPresenzeMobile()" placeholder="Cerca tra i partecipanti..."
+              class="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs focus:outline-none shadow-sm">
+
+            <div class="flex gap-1.5 text-xs">
+              <button onclick="setPresenceTab('tutti')" id="tab-pres-tutti" class="flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-center">Tutti</button>
+              <button onclick="setPresenceTab('presenti')" id="tab-pres-presenti" class="flex-1 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold text-center">Presenti</button>
+              <button onclick="setPresenceTab('assenti')" id="tab-pres-assenti" class="flex-1 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold text-center">Assenti</button>
+            </div>
+          </div>
+
+          <!-- LISTA DEI PARTECIPANTI CON TOGGLE PRESENZA IN 1 TOCCO -->
+          <div class="space-y-2" id="mobile-presenze-lista-container">
+            ${persone.length === 0 ? '<p class="p-8 text-center text-xs text-slate-400 bg-white rounded-2xl border">Nessun partecipante nell\'evento.</p>' : ''}
+            ${persone.map((p, idx) => {
+              const as = mapAssoc[p.id];
+              const isPresente = as && as.presente === 1;
+              return `
+                <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-2.5 presenza-mobile-row" 
+                  data-name="${p.cognome.toLowerCase()} ${p.nome.toLowerCase()} ${p.codice_fiscale?.toLowerCase() || ''}"
+                  data-presente="${isPresente ? '1' : '0'}">
+                  
+                  <div class="flex items-center gap-2.5 min-w-0 flex-1" onclick="renderView('scheda-persona', ${p.id})">
+                    <img src="${p.foto || defaultAvatar()}" class="w-10 h-10 rounded-2xl object-cover border flex-shrink-0">
+                    <div class="min-w-0">
+                      <p class="font-bold text-xs text-slate-900 truncate">${escapeHtml(p.cognome)} ${escapeHtml(p.nome)}</p>
+                      <p class="text-[10px] text-slate-400 font-mono truncate">${escapeHtml(p.codice_fiscale || formatDate(p.data_nascita))}</p>
+                    </div>
+                  </div>
+
+                  <!-- BOTTONE TOGGLE PRESENZA AD ALTA RISPOSTA TATTILE -->
+                  <div class="flex items-center gap-1.5" onclick="event.stopPropagation()">
+                    <button onclick="togglePresenzaMobile(${as.id}, ${isPresente ? 0 : 1}, ${ev.id})" 
+                      class="px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm touch-press ${
+                        isPresente 
+                          ? 'bg-emerald-600 text-white border border-emerald-700' 
+                          : 'bg-slate-100 text-slate-500 border border-slate-200'
+                      }">
+                      <i data-lucide="${isPresente ? 'check-circle' : 'circle'}" class="w-4 h-4"></i>
+                      <span>${isPresente ? 'PRESENTE' : 'ASSENTE'}</span>
+                    </button>
+
+                    <button onclick="rimuoviPartecipanteDaEventoMobile(${as.id}, ${ev.id})" class="p-2 text-slate-300 hover:text-rose-600 rounded-xl">
+                      <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+      window.currentPresFilter = 'tutti';
+      lucide.createIcons();
+    }
+
+    let currentPresFilter = 'tutti';
+    function setPresenceTab(filter) {
+      window.currentPresFilter = filter;
+      ['tutti', 'presenti', 'assenti'].forEach(f => {
+        const el = document.getElementById(`tab-pres-${f}`);
+        if (!el) return;
+        if (f === filter) {
+          el.className = 'flex-1 py-1.5 rounded-xl bg-blue-600 text-white font-bold text-center';
+        } else {
+          el.className = 'flex-1 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold text-center';
+        }
+      });
+      filtraPresenzeMobile();
+    }
+
+    function filtraPresenzeMobile() {
+      const q = document.getElementById('mobile-search-presenze')?.value.toLowerCase().trim() || '';
+      document.querySelectorAll('.presenza-mobile-row').forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const isPres = row.getAttribute('data-presente') === '1';
+
+        let show = name.includes(q);
+        if (show) {
+          if (window.currentPresFilter === 'presenti') show = isPres;
+          if (window.currentPresFilter === 'assenti') show = !isPres;
+        }
+        row.style.display = show ? 'flex' : 'none';
+      });
+    }
+
+    async function togglePresenzaMobile(assocId, nuovoStato, eventoId) {
+      triggerHaptic();
+      await db.persone_liste.update(assocId, { presente: nuovoStato });
+      renderDettaglioEventoView(document.getElementById('mobile-workspace'), eventoId);
+    }
+
+    async function aggiungiPersonaAdEventoMobile(eventoId) {
+      const pId = parseInt(document.getElementById('select-add-persona-evento-mobile')?.value);
+      if (!pId) return showToast('Seleziona una persona da associare.', 'warning');
+      await db.persone_liste.add({ persona_id: pId, lista_id: eventoId, presente: 0 });
+      showToast('Partecipante associato all\'evento!', 'success');
+      renderDettaglioEventoView(document.getElementById('mobile-workspace'), eventoId);
+    }
+
+    async function aggiungiGruppoAdEventoMobile(eventoId) {
+      const gId = parseInt(document.getElementById('select-add-gruppo-evento-mobile')?.value);
+      if (!gId) return showToast('Seleziona un gruppo da associare.', 'warning');
+
+      const assocGruppo = await db.persone_gruppi.where('gruppo_id').equals(gId).toArray();
+      const existing = await db.persone_liste.where('lista_id').equals(eventoId).toArray();
+      const existingSet = new Set(existing.map(a => a.persona_id));
+
+      const daAggiungere = assocGruppo
+        .filter(a => !existingSet.has(a.persona_id))
+        .map(a => ({ persona_id: a.persona_id, lista_id: eventoId, presente: 0 }));
+
+      if (daAggiungere.length > 0) {
+        await db.persone_liste.bulkAdd(daAggiungere);
+        showToast(`Aggiunti ${daAggiungere.length} partecipanti dal gruppo!`, 'success');
+      } else {
+        showToast('Tutti i componenti del gruppo sono già presenti.', 'info');
+      }
+      renderDettaglioEventoView(document.getElementById('mobile-workspace'), eventoId);
+    }
+
+    async function rimuoviPartecipanteDaEventoMobile(assocId, eventoId) {
+      await db.persone_liste.delete(assocId);
+      showToast('Partecipante rimosso.', 'info');
+      renderDettaglioEventoView(document.getElementById('mobile-workspace'), eventoId);
+    }
+
+    function renderSyncView(container) {
+      container.innerHTML = `
+        <div class="space-y-3.5">
+          <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+            <div class="flex items-center gap-2 text-blue-600 font-bold text-sm">
+              <i data-lucide="arrow-left-right" class="w-5 h-5"></i> Sincronizzazione Smartphone / PC
+            </div>
+            
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Ricevi dal tuo PC il pacchetto contenente nominativi, foto, gruppi ed eventi ed importalo qui con un tocco.
+            </p>
+
+            <!-- PULSANTE IMPORTAZIONE DIRETTA PACCHETTO DA PC -->
+            <div class="bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl p-5 text-center touch-press cursor-pointer" onclick="document.getElementById('input-file-mobile-import').click()">
+              <i data-lucide="file-down" class="w-10 h-10 text-blue-600 mx-auto mb-1.5"></i>
+              <span class="block font-extrabold text-xs text-blue-900">Tocca qui per Importare File PC</span>
+              <span class="text-[10px] text-blue-600">Seleziona il file .json ricevuto dal PC</span>
+              <input type="file" id="input-file-mobile-import" accept=".json" onchange="gestisciImportFilePC(event)" class="hidden">
+            </div>
+
+            <!-- PULSANTE ESPORTAZIONE VERSO PC -->
+            <div class="pt-2">
+              <button onclick="exportSmartphonePackage()" class="w-full bg-slate-900 text-white font-bold text-xs py-3 rounded-2xl shadow touch-press flex items-center justify-center gap-2">
+                <i data-lucide="share" class="w-4 h-4"></i> Esporta Dati Aggiornati per il PC
+              </button>
+              <p class="text-[10px] text-slate-400 text-center mt-1.5">Genera il file con le presenze prese sullo smartphone per riaprirlo su PC.</p>
+            </div>
+          </div>
+
+          <!-- IMPORTAZIONE RAPIDA ANAGRAFICA EXCEL/CSV -->
+          <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+            <h3 class="font-bold text-xs text-slate-900 uppercase">Importazione Rapida Excel / CSV</h3>
+            <p class="text-[11px] text-slate-500">Puoi anche caricare direttamente un file Excel contenente Cognome, Nome, Data, Luogo.</p>
+            
+            <label class="w-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-xs py-2.5 rounded-2xl flex items-center justify-center gap-1.5 touch-press cursor-pointer">
+              <i data-lucide="sheet" class="w-4 h-4"></i> Carica Foglio Excel (.xlsx)
+              <input type="file" accept=".xlsx, .xls, .csv" onchange="gestisciImportExcelMobile(event)" class="hidden">
+            </label>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    async function gestisciImportFilePC(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(ev) {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (!data.persone) {
+            showToast('File non riconosciuto o non valido.', 'error');
+            return;
+          }
+
+          // Sovrascrive/aggiorna il database locale con i dati completi dal PC
+          await db.persone.clear();
+          await db.gruppi.clear();
+          await db.persone_gruppi.clear();
+          await db.liste.clear();
+          await db.persone_liste.clear();
+
+          await db.persone.bulkAdd(data.persone);
+          if (data.gruppi) await db.gruppi.bulkAdd(data.gruppi);
+          if (data.persone_gruppi) await db.persone_gruppi.bulkAdd(data.persone_gruppi);
+          if (data.liste) await db.liste.bulkAdd(data.liste);
+          if (data.persone_liste) await db.persone_liste.bulkAdd(data.persone_liste);
+
+          showToast(`Sincronizzazione completata! Caricati ${data.persone.length} soggetti.`, 'success');
+          renderView('home');
+        } catch(err) {
+          console.error(err);
+          showToast('Errore durante la lettura del file JSON.', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function exportSmartphonePackage() {
+      const data = {
+        versione: "2.5",
+        data_esportazione: new Date().toISOString(),
+        dispositivo: "Smartphone",
+        persone: await db.persone.toArray(),
+        gruppi: await db.gruppi.toArray(),
+        persone_gruppi: await db.persone_gruppi.toArray(),
+        liste: await db.liste.toArray(),
+        persone_liste: await db.persone_liste.toArray()
+      };
+
+      const jsonStr = JSON.stringify(data);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Archivio_Mobile_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      showToast('File scaricato! Invialo al PC per sincronizzare le presenze.', 'success');
+    }
+
+    async function gestisciImportExcelMobile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(ev) {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: 'array', cellDates: true });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+          if (rows.length === 0) return showToast('File Excel vuoto.', 'warning');
+
+          let count = 0;
+          for (const row of rows) {
+            const keys = Object.keys(row);
+            const cogKey = keys.find(k => /^cognome$/i.test(k.trim()) || /cognome/i.test(k.trim()));
+            const nomKey = keys.find(k => /^nome$/i.test(k.trim()) || (/nome/i.test(k.trim()) && !/cognome/i.test(k.trim())));
+            const dataKey = keys.find(k => /data/i.test(k.trim()) || /nascita/i.test(k.trim()));
+            const luogoKey = keys.find(k => /luogo/i.test(k.trim()) || /città/i.test(k.trim()));
+
+            const cognome = String(row[cogKey] || '').trim();
+            const nome = String(row[nomKey] || '').trim();
+            let data_nascita = row[dataKey] || '';
+            const luogo_nascita = String(row[luogoKey] || '').trim();
+
+            if (!cognome || !nome) continue;
+
+            if (data_nascita instanceof Date) {
+              data_nascita = data_nascita.toISOString().split('T')[0];
+            }
+
+            const dup = await db.persone.where({ cognome, nome }).first();
+            if (!dup) {
+              await db.persone.add({
+                cognome, nome, data_nascita, luogo_nascita, foto: '', data_inserimento: new Date().toISOString()
+              });
+              count++;
+            }
+          }
+          showToast(`Importati ${count} nuovi soggetti da Excel!`, 'success');
+          renderView('persone');
+        } catch(err) {
+          showToast('Errore lettura Excel.', 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    async function openModalPersona(id = null) {
+      let p = {
+        cognome: '', nome: '', data_nascita: '', luogo_nascita: '',
+        codice_fiscale: '', telefono: '', email: '', indirizzo: '', note: '', foto: ''
+      };
+      let selectedGruppi = new Set();
+
+      if (id) {
+        p = await db.persone.get(id);
+        const gAssoc = await db.persone_gruppi.where('persona_id').equals(id).toArray();
+        selectedGruppi = new Set(gAssoc.map(a => a.gruppo_id));
+      }
+
+      const tuttiGruppi = await db.gruppi.toArray();
+      const modal = document.getElementById('modal-container');
+
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div class="bg-white rounded-t-3xl sm:rounded-3xl p-4 w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl safe-bottom">
+            
+            <div class="flex justify-between items-center pb-2.5 border-b mb-3">
+              <h3 class="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                <i data-lucide="${id ? 'edit' : 'user-plus'}" class="w-4 h-4 text-blue-600"></i>
+                ${id ? 'Modifica Soggetto' : 'Nuovo Nominativo'}
+              </h3>
+              <button onclick="closeModal()" class="text-slate-400 font-bold p-1">✕</button>
+            </div>
+
+            <form onsubmit="salvaPersonaSoggettaMobile(event, ${id})" class="flex-1 overflow-y-auto space-y-3 pr-1">
+              
+              <!-- FOTO CON COMPRESSIONE SMARTPHONE AUTOMATICA -->
+              <div class="flex items-center gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                <img id="mobile-foto-preview" src="${p.foto || defaultAvatar()}" class="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-sm flex-shrink-0">
+                <div class="min-w-0 flex-1">
+                  <span class="text-xs font-bold text-slate-800 block">Fotografia</span>
+                  <div class="flex gap-1.5 mt-1">
+                    <label class="bg-blue-600 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-xl inline-flex items-center gap-1 touch-press cursor-pointer shadow-sm">
+                      <i data-lucide="camera" class="w-3 h-3"></i> Scatta / Carica
+                      <input type="file" accept="image/*" onchange="comprimiFotoSmartphone(event)" class="hidden">
+                    </label>
+                    <button type="button" onclick="rimuoviFotoMobile()" class="text-rose-600 text-[11px] font-bold px-2 py-1.5 rounded-xl border border-rose-200">
+                      Rimuovi
+                    </button>
+                  </div>
+                  <input type="hidden" id="mobile-foto-base64" value="${p.foto || ''}">
+                </div>
+              </div>
+
+              <!-- DATI ANAGRAFICI FONDAMENTALI -->
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Cognome *</label>
+                  <input type="text" id="mob-cognome" required value="${escapeHtml(p.cognome)}" class="w-full p-2 bg-slate-50 border rounded-xl font-semibold">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Nome *</label>
+                  <input type="text" id="mob-nome" required value="${escapeHtml(p.nome)}" class="w-full p-2 bg-slate-50 border rounded-xl font-semibold">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Data Nascita</label>
+                  <input type="date" id="mob-data_nascita" value="${p.data_nascita || ''}" class="w-full p-2 bg-slate-50 border rounded-xl">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Luogo Nascita</label>
+                  <input type="text" id="mob-luogo_nascita" value="${escapeHtml(p.luogo_nascita || '')}" class="w-full p-2 bg-slate-50 border rounded-xl">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Codice Fiscale</label>
+                  <input type="text" id="mob-codice_fiscale" maxlength="16" value="${escapeHtml(p.codice_fiscale || '')}" class="w-full p-2 bg-slate-50 border rounded-xl font-mono uppercase">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Telefono</label>
+                  <input type="tel" id="mob-telefono" value="${escapeHtml(p.telefono || '')}" class="w-full p-2 bg-slate-50 border rounded-xl">
+                </div>
+              </div>
+
+              <div class="text-xs space-y-2">
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Email</label>
+                  <input type="email" id="mob-email" value="${escapeHtml(p.email || '')}" class="w-full p-2 bg-slate-50 border rounded-xl">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Indirizzo Residenza</label>
+                  <input type="text" id="mob-indirizzo" value="${escapeHtml(p.indirizzo || '')}" class="w-full p-2 bg-slate-50 border rounded-xl">
+                </div>
+                <div>
+                  <label class="font-bold text-slate-600 block mb-0.5">Note Aggiuntive</label>
+                  <textarea id="mob-note" rows="2" class="w-full p-2 bg-slate-50 border rounded-xl">${escapeHtml(p.note || '')}</textarea>
+                </div>
+              </div>
+
+              <!-- GRUPPI -->
+              <div class="text-xs pt-1">
+                <label class="font-bold text-purple-700 block mb-1">Associa ai Gruppi</label>
+                <div class="grid grid-cols-2 gap-1.5 p-2 bg-purple-50/50 rounded-2xl border border-purple-100 max-h-28 overflow-y-auto">
+                  ${tuttiGruppi.map(g => `
+                    <label class="flex items-center gap-1.5 p-1 bg-white rounded-lg border text-[11px] cursor-pointer">
+                      <input type="checkbox" name="mob-gruppi-select" value="${g.id}" ${selectedGruppi.has(g.id) ? 'checked' : ''} class="rounded text-purple-600">
+                      <span class="truncate font-semibold">${escapeHtml(g.nome)}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="flex gap-2 pt-2 border-t">
+                <button type="button" onclick="closeModal()" class="flex-1 py-2.5 text-xs font-bold text-slate-500">Annulla</button>
+                <button type="submit" class="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-xs shadow touch-press">
+                  ${id ? 'Salva Modifiche' : 'Salva Soggetto'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    function comprimiFotoSmartphone(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const MAX = 500;
+          let w = img.width, h = img.height;
+          if (w > MAX) { h *= MAX / w; w = MAX; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.75);
+          document.getElementById('mobile-foto-preview').src = compressed;
+          document.getElementById('mobile-foto-base64').value = compressed;
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function rimuoviFotoMobile() {
+      document.getElementById('mobile-foto-preview').src = defaultAvatar();
+      document.getElementById('mobile-foto-base64').value = '';
+    }
+
+    async function salvaPersonaSoggettaMobile(e, id) {
+      e.preventDefault();
+      const cognome = document.getElementById('mob-cognome').value.trim();
+      const nome = document.getElementById('mob-nome').value.trim();
+      const data_nascita = document.getElementById('mob-data_nascita').value;
+      const luogo_nascita = document.getElementById('mob-luogo_nascita').value.trim();
+      const codice_fiscale = document.getElementById('mob-codice_fiscale').value.trim().toUpperCase();
+      const telefono = document.getElementById('mob-telefono').value.trim();
+      const email = document.getElementById('mob-email').value.trim();
+      const indirizzo = document.getElementById('mob-indirizzo').value.trim();
+      const note = document.getElementById('mob-note').value.trim();
+      const foto = document.getElementById('mobile-foto-base64').value;
+
+      const gruppiSel = Array.from(document.querySelectorAll('input[name="mob-gruppi-select"]:checked')).map(c => parseInt(c.value));
+
+      const payload = {
+        cognome, nome, data_nascita, luogo_nascita, codice_fiscale,
+        telefono, email, indirizzo, note, foto,
+        data_inserimento: id ? (await db.persone.get(id)).data_inserimento : new Date().toISOString()
+      };
+
+      let personaId = id;
+      if (id) {
+        await db.persone.update(id, payload);
+        await db.persone_gruppi.where('persona_id').equals(id).delete();
+      } else {
+        personaId = await db.persone.add(payload);
+      }
+
+      const gAssoc = gruppiSel.map(gruppo_id => ({ persona_id: personaId, gruppo_id }));
+      await db.persone_gruppi.bulkAdd(gAssoc);
+
+      showToast(`Scheda salvata con successo!`, 'success');
+      closeModal();
+      if (currentView === 'scheda-persona') {
+        renderView('scheda-persona', personaId);
+      } else {
+        renderView('persone');
+      }
+    }
+
+    // MODALI GRUPPO ED EVENTO
+    function openModalNuovoGruppo(id = null) {
+      const modal = document.getElementById('modal-container');
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-3 shadow-xl">
+            <h3 class="font-bold text-xs text-slate-900">${id ? 'Modifica Gruppo' : 'Nuovo Gruppo'}</h3>
+            <input type="text" id="modal-mob-nome-gruppo" required placeholder="Nome gruppo..." class="w-full p-2 bg-slate-50 border rounded-xl text-xs font-semibold">
+            <textarea id="modal-mob-desc-gruppo" rows="2" placeholder="Note facoltative..." class="w-full p-2 bg-slate-50 border rounded-xl text-xs"></textarea>
+            <div class="flex justify-end gap-2 pt-1">
+              <button onclick="closeModal()" class="px-3 py-1.5 text-xs font-bold text-slate-500">Annulla</button>
+              <button onclick="salvaGruppoMobile(${id})" class="px-3.5 py-1.5 bg-purple-600 text-white font-bold rounded-xl text-xs">Salva</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function salvaGruppoMobile(id) {
+      const nome = document.getElementById('modal-mob-nome-gruppo')?.value.trim();
+      const descrizione = document.getElementById('modal-mob-desc-gruppo')?.value.trim();
+      if (!nome) return showToast('Inserisci il nome del gruppo.', 'warning');
+
+      if (id) {
+        await db.gruppi.update(id, { nome, descrizione });
+      } else {
+        await db.gruppi.add({ nome, descrizione });
+      }
+      closeModal();
+      renderView('gruppi');
+    }
+
+    function openModalNuovoEvento() {
+      const modal = document.getElementById('modal-container');
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-3 shadow-xl">
+            <h3 class="font-bold text-xs text-slate-900">Nuovo Evento</h3>
+            <div>
+              <label class="text-[10px] font-bold text-slate-500 block">Nome Evento *</label>
+              <input type="text" id="modal-mob-nome-evento" required placeholder="Es. Riunione Generale" class="w-full p-2 bg-slate-50 border rounded-xl text-xs font-semibold">
+            </div>
+            <div>
+              <label class="text-[10px] font-bold text-slate-500 block">Data Evento *</label>
+              <input type="date" id="modal-mob-data-evento" value="${new Date().toISOString().split('T')[0]}" class="w-full p-2 bg-slate-50 border rounded-xl text-xs font-semibold">
+            </div>
+            <div class="flex justify-end gap-2 pt-1">
+              <button onclick="closeModal()" class="px-3 py-1.5 text-xs font-bold text-slate-500">Annulla</button>
+              <button onclick="salvaEventoMobile()" class="px-3.5 py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs">Crea</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function salvaEventoMobile() {
+      const nome = document.getElementById('modal-mob-nome-evento')?.value.trim();
+      const data_evento = document.getElementById('modal-mob-data-evento')?.value;
+      if (!nome) return showToast('Inserisci il nome evento.', 'warning');
+
+      const id = await db.liste.add({ nome, data_evento, data_creazione: new Date().toISOString() });
+      closeModal();
+      renderView('dettaglio-evento', id);
+    }
+
+    function confirmDeletePersona(id, nominativo) {
+      const modal = document.getElementById('modal-container');
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-2 text-center shadow-xl">
+            <h3 class="font-bold text-sm text-rose-600">Elimina Soggetto</h3>
+            <p class="text-xs text-slate-600">Eliminare definitivamente <strong>${escapeHtml(nominativo)}</strong>?</p>
+            <div class="flex justify-center gap-2 pt-2">
+              <button onclick="closeModal()" class="px-3 py-1.5 text-xs font-bold text-slate-500">No</button>
+              <button onclick="eseguiDeletePersonaMobile(${id})" class="px-4 py-1.5 bg-rose-600 text-white font-bold rounded-xl text-xs">Elimina</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function eseguiDeletePersonaMobile(id) {
+      await db.persone.delete(id);
+      await db.persone_gruppi.where('persona_id').equals(id).delete();
+      await db.persone_liste.where('persona_id').equals(id).delete();
+      showToast('Persona eliminata.', 'info');
+      closeModal();
+      renderView('persone');
+    }
+
+    function confirmDeleteGruppo(id, nome) {
+      const modal = document.getElementById('modal-container');
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-2 text-center shadow-xl">
+            <h3 class="font-bold text-sm text-rose-600">Elimina Gruppo</h3>
+            <p class="text-xs text-slate-600">Eliminare il gruppo <strong>"${escapeHtml(nome)}"</strong>?</p>
+            <div class="flex justify-center gap-2 pt-2">
+              <button onclick="closeModal()" class="px-3 py-1.5 text-xs font-bold text-slate-500">No</button>
+              <button onclick="eseguiDeleteGruppoMobile(${id})" class="px-4 py-1.5 bg-rose-600 text-white font-bold rounded-xl text-xs">Elimina</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function eseguiDeleteGruppoMobile(id) {
+      await db.gruppi.delete(id);
+      await db.persone_gruppi.where('gruppo_id').equals(id).delete();
+      showToast('Gruppo eliminato.', 'info');
+      closeModal();
+      renderView('gruppi');
+    }
+
+    function confirmDeleteEvento(id, nome) {
+      const modal = document.getElementById('modal-container');
+      modal.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-2xl p-4 max-w-xs w-full space-y-2 text-center shadow-xl">
+            <h3 class="font-bold text-sm text-rose-600">Elimina Evento</h3>
+            <p class="text-xs text-slate-600">Eliminare l'evento <strong>"${escapeHtml(nome)}"</strong> e il relativo foglio presenze?</p>
+            <div class="flex justify-center gap-2 pt-2">
+              <button onclick="closeModal()" class="px-3 py-1.5 text-xs font-bold text-slate-500">No</button>
+              <button onclick="eseguiDeleteEventoMobile(${id})" class="px-4 py-1.5 bg-rose-600 text-white font-bold rounded-xl text-xs">Elimina</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function eseguiDeleteEventoMobile(id) {
+      await db.liste.delete(id);
+      await db.persone_liste.where('lista_id').equals(id).delete();
+      showToast('Evento eliminato.', 'info');
+      closeModal();
+      renderView('eventi');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-container').innerHTML = '';
+    }
+
+    // --- GENERATORE DI FOTO RASTER PER PDF MOBILE ---
+    async function getRasterImageForPdf(src) {
+      if (!src) return null;
+      if (src.startsWith('data:image/jpeg') || src.startsWith('data:image/png')) return src;
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 80; canvas.height = 80;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(0, 0, 80, 80);
+            ctx.drawImage(img, 0, 0, 80, 80);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          } catch(e) { resolve(null); }
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    }
+
+    async function exportPersonePDFMobile() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('landscape');
+      let persone = await db.persone.toArray();
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      if (persone.length === 0) return showToast('Nessun nominativo da esportare.', 'warning');
+      showToast('Generazione PDF con foto in corso...', 'info');
+
+      const conFoto = await Promise.all(persone.map(async p => ({ ...p, pdfPhoto: await getRasterImageForPdf(p.foto || defaultAvatar()) })));
+
+      doc.setFontSize(14);
+      doc.text("Archivio Anagrafica - Master Mobile", 14, 15);
+      doc.setFontSize(8);
+      doc.text(`Totale: ${persone.length} | Data: ${new Date().toLocaleDateString('it-IT')}`, 14, 20);
+
+      doc.autoTable({
+        head: [['N.', 'Foto', 'Cognome e Nome', 'Data Nascita', 'Codice Fiscale', 'Telefono']],
+        body: conFoto.map((p, i) => [i + 1, '', `${p.cognome} ${p.nome}`, formatDate(p.data_nascita), p.codice_fiscale || '-', p.telefono || '-']),
+        startY: 24,
+        styles: { fontSize: 8, cellPadding: 2, minCellHeight: 12, valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 14, halign: 'center' } },
+        headStyles: { fillColor: [30, 41, 59] },
+        didDrawCell: function(data) {
+          if (data.section === 'body' && data.column.index === 1) {
+            const item = conFoto[data.row.index];
+            if (item && item.pdfPhoto) {
+              const sz = 9;
+              const posX = data.cell.x + (data.cell.width - sz) / 2;
+              const posY = data.cell.y + (data.cell.height - sz) / 2;
+              try { doc.addImage(item.pdfPhoto, 'JPEG', posX, posY, sz, sz); } catch(e) {}
+            }
+          }
+        }
+      });
+      doc.save(`Anagrafica_Mobile_${new Date().toISOString().split('T')[0]}.pdf`);
+      showToast('PDF Anagrafica scaricato!', 'success');
+    }
+
+    async function exportPresenzePDFMobile(eventoId, nomeEvento, dataEvento) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const assoc = await db.persone_liste.where('lista_id').equals(eventoId).toArray();
+      const mapAssoc = {};
+      assoc.forEach(a => mapAssoc[a.persona_id] = a);
+
+      const pIds = assoc.map(a => a.persona_id);
+      let persone = await db.persone.where('id').anyOf(pIds).toArray();
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      if (persone.length === 0) return showToast('Nessun partecipante da esportare.', 'warning');
+      showToast('Generazione foglio presenze PDF...', 'info');
+
+      const conFoto = await Promise.all(persone.map(async p => ({ ...p, pdfPhoto: await getRasterImageForPdf(p.foto || defaultAvatar()) })));
+
+      const totali = persone.length;
+      const presenti = assoc.filter(a => a.presente === 1).length;
+
+      doc.setFontSize(14);
+      doc.text(`Presenze: ${nomeEvento}`, 14, 15);
+      doc.setFontSize(8);
+      doc.text(`Data: ${formatDate(dataEvento)} | Totale: ${totali} | Presenti: ${presenti} | Assenti: ${totali - presenti}`, 14, 20);
+
+      doc.autoTable({
+        head: [['N.', 'Foto', 'Cognome e Nome', 'Codice Fiscale', 'Stato Presenza']],
+        body: conFoto.map((p, i) => [
+          i + 1, '', `${p.cognome} ${p.nome}`, p.codice_fiscale || '-', mapAssoc[p.id]?.presente === 1 ? 'PRESENTE' : 'ASSENTE'
+        ]),
+        startY: 24,
+        styles: { fontSize: 8.5, cellPadding: 2, minCellHeight: 12, valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 14, halign: 'center' } },
+        headStyles: { fillColor: [37, 99, 235] },
+        didDrawCell: function(data) {
+          if (data.section === 'body' && data.column.index === 1) {
+            const item = conFoto[data.row.index];
+            if (item && item.pdfPhoto) {
+              const sz = 9;
+              const posX = data.cell.x + (data.cell.width - sz) / 2;
+              const posY = data.cell.y + (data.cell.height - sz) / 2;
+              try { doc.addImage(item.pdfPhoto, 'JPEG', posX, posY, sz, sz); } catch(e) {}
+            }
+          }
+        },
+        didParseCell: function(data) {
+          if (data.column.index === 4) {
+            if (data.cell.raw === 'PRESENTE') {
+              data.cell.styles.textColor = [16, 185, 129];
+              data.cell.styles.fontStyle = 'bold';
+            } else {
+              data.cell.styles.textColor = [239, 68, 68];
+            }
+          }
+        }
+      });
+      doc.save(`Presenze_${nomeEvento.replace(/\s+/g, '_')}.pdf`);
+      showToast('Foglio Presenze PDF scaricato!', 'success');
+    }
+
+    async function exportMembriGruppoPDFMobile(gruppoId, nomeGruppo) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const assoc = await db.persone_gruppi.where('gruppo_id').equals(gruppoId).toArray();
+      let persone = await db.persone.where('id').anyOf(assoc.map(a => a.persona_id)).toArray();
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      const conFoto = await Promise.all(persone.map(async p => ({ ...p, pdfPhoto: await getRasterImageForPdf(p.foto || defaultAvatar()) })));
+
+      doc.setFontSize(14);
+      doc.text(`Gruppo: ${nomeGruppo}`, 14, 15);
+      doc.setFontSize(8);
+      doc.text(`Componenti: ${persone.length} | Data: ${new Date().toLocaleDateString('it-IT')}`, 14, 20);
+
+      doc.autoTable({
+        head: [['N.', 'Foto', 'Cognome e Nome', 'Data Nascita', 'Telefono']],
+        body: conFoto.map((p, i) => [i + 1, '', `${p.cognome} ${p.nome}`, formatDate(p.data_nascita), p.telefono || '-']),
+        startY: 24,
+        styles: { fontSize: 8.5, cellPadding: 2, minCellHeight: 12, valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 14, halign: 'center' } },
+        headStyles: { fillColor: [124, 58, 237] },
+        didDrawCell: function(data) {
+          if (data.section === 'body' && data.column.index === 1) {
+            const item = conFoto[data.row.index];
+            if (item && item.pdfPhoto) {
+              const sz = 9;
+              const posX = data.cell.x + (data.cell.width - sz) / 2;
+              const posY = data.cell.y + (data.cell.height - sz) / 2;
+              try { doc.addImage(item.pdfPhoto, 'JPEG', posX, posY, sz, sz); } catch(e) {}
+            }
+          }
+        }
+      });
+      doc.save(`Gruppo_${nomeGruppo.replace(/\s+/g, '_')}.pdf`);
+      showToast('PDF Gruppo scaricato!', 'success');
+    }
+
+    async function exportAllPeopleToExcelMobile() {
+      const persone = await db.persone.toArray();
+      if (persone.length === 0) return showToast('Nessuna persona da esportare.', 'warning');
+      persone.sort((a, b) => a.cognome.localeCompare(b.cognome));
+
+      const rows = persone.map((p, i) => ({
+        'N.': i + 1,
+        'Cognome': p.cognome,
+        'Nome': p.nome,
+        'Data di Nascita': formatDate(p.data_nascita),
+        'Luogo di Nascita': p.luogo_nascita || '',
+        'Codice Fiscale': p.codice_fiscale || '',
+        'Telefono': p.telefono || '',
+        'Email': p.email || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Anagrafica");
+      XLSX.writeFile(wb, `Anagrafica_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast('File Excel generato!', 'success');
+    }
+
+    async function seedDemoIfEmpty() {
+      if (await db.persone.count() > 0) return;
+
+      const pIds = await db.persone.bulkAdd([
+        { cognome: 'Rossi', nome: 'Mario', data_nascita: '1990-04-15', luogo_nascita: 'Roma', codice_fiscale: 'RSSMRA90D15H501Z', telefono: '3331234567', email: 'mario.rossi@example.it', foto: '', data_inserimento: new Date().toISOString() },
+        { cognome: 'Bianchi', nome: 'Giulia', data_nascita: '1985-09-20', luogo_nascita: 'Pescara', codice_fiscale: 'BNCGLI85P60G482X', telefono: '3409876543', email: 'giulia.bianchi@example.it', foto: '', data_inserimento: new Date().toISOString() }
+      ], { allKeys: true });
+
+      const g1 = await db.gruppi.add({ nome: 'Staff Coordinamento', descrizione: 'Organizzatori eventi' });
+      const g2 = await db.gruppi.add({ nome: 'Volontari', descrizione: 'Assistenza e accoglienza' });
+
+      await db.persone_gruppi.bulkAdd([
+        { persona_id: pIds[0], gruppo_id: g1 },
+        { persona_id: pIds[1], gruppo_id: g2 }
+      ]);
+    }
+  </script>
+</body>
+</html>
